@@ -4724,6 +4724,8 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'designcomponent_Fric_Dune-button', input: 'designcomponent_Fric_Dune-input', property: 'designcomponent_Fric_Dune' },
         { id: 'designcomponent_Fric_Berm-button', input: 'designcomponent_Fric_Berm-input', property: 'designcomponent_Fric_Berm' },
         { id: 'designcomponent_Fric_Seawall-button', input: 'designcomponent_Fric_Seawall-input', property: 'designcomponent_Fric_Seawall' },
+        // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 1).
+        { id: 'designcomponent_Elev_Mangrove-button', input: 'designcomponent_Elev_Mangrove-input', property: 'designcomponent_Elev_Mangrove' },
         { id: 'changeSeaLevel-button', input: 'changeSeaLevel-input', property: 'changeSeaLevel' },
         { id: 'dt_writesurface-button', input: 'dt_writesurface-input', property: 'dt_writesurface' },
         // Added by Codex: Start nested-grid boundary time-series output controls.
@@ -4766,6 +4768,8 @@ document.addEventListener('DOMContentLoaded', function () {
         { input: 'changethisTimeSeries-select', property: 'changethisTimeSeries' },
         { input: 'useBreakingModel-select', property: 'useBreakingModel' },
         { input: 'designcomponentToAdd-select', property: 'designcomponentToAdd' },
+        // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 1).
+        { input: 'designcomponent_SetBathy_Mangrove-select', property: 'designcomponent_SetBathy_Mangrove' },
         // CODEX: Track which linear-structure endpoint the shared x/y inputs edit.
         { input: 'designcomponent_CurrentEndPoint-select', property: 'designcomponent_CurrentEndPoint' },
         { input: 'ShowArrows-select', property: 'ShowArrows' },

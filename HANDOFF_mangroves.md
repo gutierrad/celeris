@@ -18,7 +18,7 @@ Status values: `NOT STARTED` · `IN PROGRESS` · `DONE` · `BLOCKED` · `SKIPPED
 | # | Phase | Status |
 |---|-------|--------|
 | 0 | Branch + baseline verification | DONE |
-| 1 | Constants and UI wiring | NOT STARTED |
+| 1 | Constants and UI wiring | DONE |
 | 2 | Uniform buffer plumbing | NOT STARTED |
 | 3 | Shader branch — bathy from component footprint | NOT STARTED |
 | 4 | JS dispatch + texture copy block | NOT STARTED |
@@ -191,27 +191,31 @@ errors, `surfaceToPlot == 22` correctly renders the painted patch. Baseline matc
 
 ### Phase 1 — Constants and UI wiring
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 Add the parameters, wire the UI, change no behavior yet.
 
-- [ ] `js/constants_load_calc.js` (near lines 327–355): add
-      `designcomponent_Elev_Mangrove` (default: pick an intertidal value, e.g. `0.5` m) and
-      `designcomponent_SetBathy_Mangrove` (`0`/`1`, default **`0`** so the branch is inert until
-      explicitly enabled)
-- [ ] `index.html` design panel: a numeric input + Update button for the elevation, following the
-      `designcomponent_CrestElev` block pattern; and a select (Yes/No) for the enable flag.
-      Label it clearly as applying to mangrove areas only.
-- [ ] `js/main.js` `buttonActions` (~4710–4727): add the elevation entry alongside the existing
-      `designcomponent_*` entries. Wire the select the way other selects are wired.
-- [ ] Confirm the values round-trip: change in UI → visible in `calc_constants` in the console →
-      survives `updateAllUIElements()`
+- [x] `js/constants_load_calc.js` (after line 355, the `designcomponent_Fric_*` block): added
+      `designcomponent_Elev_Mangrove` (default `0.5` m) and `designcomponent_SetBathy_Mangrove`
+      (`0`/`1`, default `0`, inert)
+- [x] `index.html` design panel: new "Mangroves: Set Bathymetry/Topography Elevation" block
+      inserted right after the friction inputs, before the `designcomponent_Radius` block —
+      numeric input + Update button for elevation (follows the `designcomponent_CrestElev`
+      pattern), and a Yes/No select for the enable flag. Both labeled "Mangroves only".
+- [x] `js/main.js`: elevation entry added to `buttonActions` (~4728, next to the other
+      `designcomponent_*` entries); enable flag added to `button_dropdown_Actions` (~4772, next
+      to `designcomponentToAdd-select`) — same generic wiring every other design-component field
+      uses, so both auto-round-trip through `updateAllUIElements()`.
+- [x] Round-trip confirmed manually in Chrome: input loads at `0.5` / select loads at `No`;
+      editing + Update persists the value across other UI interactions; no console errors.
 
 **Exit criteria:** parameters exist and are editable from the UI; simulation behavior is
 byte-for-byte unchanged.
 
 **Notes:**
-_(fill in after completion)_
+No uniform buffer or shader touched this phase — `designcomponent_SetBathy_Mangrove` exists only
+in `calc_constants` and the UI, not yet read anywhere in the click-update path, so behavior is
+unchanged by construction, not just by testing. Uniform plumbing is Phase 2.
 
 ---
 

@@ -605,7 +605,28 @@
                     <label for="designcomponent_Fric_Seawall-input">Seawall:</label>
                     <input type="number" id="designcomponent_Fric_Seawall-input" name="designcomponent_Fric_SeawallValue">
                     <button id="designcomponent_Fric_Seawall-button" type="button">Update</button>
-                    
+
+                    <br />
+                    <br />
+
+                    <!-- CODEX: Mangrove-only bathy/topo set-elevation (mangroves branch, Phase 1) -->
+                    <html4f>
+                    Mangroves: Set Bathymetry/Topography Elevation </a>
+                    </html4f>
+                    <br />
+                    <!-- Updates go to calc_constants.designcomponent_Elev_Mangrove-->
+                    <label for="designcomponent_Elev_Mangrove-input">Mangroves only: target bed elevation (m) applied when set-bathy is enabled below:</label>
+                    <br />
+                    <input type="number" id="designcomponent_Elev_Mangrove-input" name="designcomponent_Elev_MangroveValue">
+                    <button id="designcomponent_Elev_Mangrove-button" type="button">Update</button>
+                    <br />
+                    <br />
+                    <!-- Updates go to calc_constants.designcomponent_SetBathy_Mangrove-->
+                    <label for="designcomponent_SetBathy_Mangrove-select">Mangroves only: also set bathymetry/topography to the target elevation when painting:</label>
+                    <select id="designcomponent_SetBathy_Mangrove-select" name="designcomponent_SetBathy_MangroveValue">
+                        <option value="0">No</option>
+                        <option value="1">Yes</option>
+                    </select>
                     <br />
                     <br />
 
