@@ -2531,6 +2531,9 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
                 // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 2) - active values reset to inert (0) for every component except mangroves.
                 calc_constants.designcomponent_TargetElev = (calc_constants.designcomponentToAdd == 3) ? calc_constants.designcomponent_Elev_Mangrove : 0.0;
                 calc_constants.designcomponent_SetBathy = (calc_constants.designcomponentToAdd == 3) ? calc_constants.designcomponent_SetBathy_Mangrove : 0;
+                // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 4) - dispatch 1 (ID/friction) must never see SetBathy=1; the follow-up bathy dispatch below flips it on, then resets it.
+                const designcomponent_SetBathy_pending = calc_constants.designcomponent_SetBathy;
+                calc_constants.designcomponent_SetBathy = 0;
                 MouseClickChange_view.setFloat32(56, calc_constants.designcomponent_Friction, true);             // f32
                 MouseClickChange_view.setFloat32(60, calc_constants.changeSeaLevel_delta, true);             // f32
                 calc_constants.changeSeaLevel_delta = 0.0; // once the change is added once, set to zero
@@ -2578,6 +2581,22 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
                     } else {
                         runCopyTextures(device, calc_constants, txtemp_MouseClick, txDesignComponents)
                         runCopyTextures(device, calc_constants, txtemp_MouseClick2, txBottomFriction)
+                        // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 4) - second dispatch of the same shader, now with SetBathy=1.
+                        if (designcomponent_SetBathy_pending == 1) {
+                            console.log('Setting Mangrove Bathy/Topo to Target Elevation')
+                            calc_constants.designcomponent_SetBathy = 1;
+                            updateMouseClickDesignBathyUniforms();
+                            runComputeShader(device, MouseClickChange_uniformBuffer, MouseClickChange_uniforms, MouseClickChange_Pipeline, MouseClickChange_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  // update bathy/topo to mangrove target elevation
+                            runCopyTextures(device, calc_constants, txtemp_MouseClick, txBottom)
+                            runCopyTextures(device, calc_constants, txtemp_MouseClick2, txstateUVstar)
+                            runComputeShader(device, Updateneardry_uniformBuffer, Updateneardry_uniforms, Updateneardry_Pipeline, Updateneardry_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  //need to update tridiagonal coefficients due to change inn depth
+                            runCopyTextures(device, calc_constants, txtemp_bottom, txBottom)
+                            if (calc_constants.NLSW_or_Bous >= 1) { // only update for Celeris Boussinesq equations
+                                console.log('Updating neardry & tridiag coef due to mangrove bathy set')
+                                runComputeShader(device, UpdateTrid_uniformBuffer, UpdateTrid_uniforms, UpdateTrid_Pipeline, UpdateTrid_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  //need to update tridiagonal coefficients due to change inn depth
+                            }
+                            calc_constants.designcomponent_SetBathy = 0;
+                        }
                     }
                 }
             }

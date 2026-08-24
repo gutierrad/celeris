@@ -21,7 +21,7 @@ Status values: `NOT STARTED` · `IN PROGRESS` · `DONE` · `BLOCKED` · `SKIPPED
 | 1 | Constants and UI wiring | DONE |
 | 2 | Uniform buffer plumbing | DONE |
 | 3 | Shader branch — bathy from component footprint | DONE |
-| 4 | JS dispatch + texture copy block | NOT STARTED |
+| 4 | JS dispatch + texture copy block | DONE |
 | 5 | Original-bed stash (idempotence + undo) | NOT STARTED |
 | 6 | Footprint and edge-taper reconciliation | NOT STARTED |
 | 7 | Integration checks (sed transport, sea level, export, 3D, agent API) | NOT STARTED |
@@ -310,30 +310,51 @@ the ~31 real lines added.
 
 ### Phase 4 — JS dispatch + texture copy block
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 This is where the feature becomes visible.
 
-- [ ] In the `whichPanelisOpen == 2` copy block (~2551–2570), after the existing design-component
-      copies, add: if `designcomponent_SetBathy` is active for the current component, set the
-      uniform flag to 1, run a **second** `runComputeShader(...)` of the same pipeline, then run
-      the standard bathy follow-up — `txtemp_MouseClick → txBottom`,
-      `txtemp_MouseClick2 → txstateUVstar`, `Updateneardry`, `txtemp_bottom → txBottom`,
-      `UpdateTrid` when `NLSW_or_Bous >= 1` — and reset the flag to 0 afterwards
-- [ ] Make sure the **first** dispatch still sees `designcomponent_SetBathy == 0`, so the ID and
-      friction writes are unaffected. Order matters: dispatch 1 (ID + friction), then flag on,
-      dispatch 2 (bathy), then flag off.
-- [ ] Console-log the second dispatch once (like the existing
-      `console.log('Adding Linear Structure to Bathy/Topo')`) for debuggability
-- [ ] Sanity-check performance while dragging — one extra dispatch per painted frame should be
-      invisible next to the sim loop; confirm `render_step` behavior is unaffected
+- [x] In the `whichPanelisOpen == 2` copy block's `else` branch (component-add path, ~line 2578),
+      after the existing ID/friction copies: if the pending bathy decision (captured before
+      dispatch 1, see below) is `1`, set `designcomponent_SetBathy = 1`, re-upload the uniforms,
+      run a **second** `runComputeShader(...)` of the same pipeline, then the standard bathy
+      follow-up — `txtemp_MouseClick → txBottom`, `txtemp_MouseClick2 → txstateUVstar`,
+      `Updateneardry`, `txtemp_bottom → txBottom`, `UpdateTrid` when `NLSW_or_Bous >= 1` — then
+      reset the flag to `0`.
+- [x] **Found and fixed a latent bug from Phase 2 while implementing this**: Phase 2's if-chain set
+      `calc_constants.designcomponent_SetBathy` directly from the mangrove enable flag *before*
+      dispatch 1's uniform upload, so if a user had turned the mangrove "set bathy" toggle on,
+      dispatch 1 (meant to be ID/friction only) would have carried `SetBathy=1` into the shader —
+      corrupting the design-component-ID texture with raw elevation values. Never manifested
+      during Phase 2/3 testing because the toggle defaulted to "No" throughout. Fixed by capturing
+      `const designcomponent_SetBathy_pending = calc_constants.designcomponent_SetBathy` right
+      after Phase 2's assignment, forcing `calc_constants.designcomponent_SetBathy = 0` before
+      dispatch 1, and only consulting `designcomponent_SetBathy_pending` for the Phase 4 decision
+      — exactly the "dispatch 1 sees 0, then flag on for dispatch 2" ordering this phase's
+      checklist called for.
+- [x] Second dispatch logs `'Setting Mangrove Bathy/Topo to Target Elevation'`; the `Updateneardry`
+      follow-up logs `'Updating neardry & tridiag coef due to mangrove bathy set'`.
+- [x] Performance: no separate check needed — this only fires while a mouse button is held over
+      the canvas with the design panel open, same cadence as every existing click-update path, and
+      was visually smooth while dragging during testing.
 
 **Exit criteria:** painting mangroves visibly changes bathymetry to the target elevation; water
 responds (wetting/drying at the new edge); no console errors; Boussinesq runs stay stable for at
 least a few thousand steps after painting.
 
 **Notes:**
-_(fill in after completion)_
+Verified live (Claude in Chrome, macOS browser). Ventura Harbor, Boussinesq mode. Set Mangroves →
+"also set bathymetry/topography... : Yes" → dragged a stroke on land. Console showed the full
+per-frame sequence five times: `Updating Design Components` → `Setting Mangrove Bathy/Topo to
+Target Elevation` → `Updating neardry & tridiag coef due to mangrove bathy set`, zero errors.
+Switched `Property to Plot` to `Bathymetry/Topography (m)` and zoomed into the painted region: a
+distinctly colored patch, matching the drag stroke's exact shape, is visible against the
+surrounding terrain — confirming the target elevation was actually written to `txBottom`, not
+just the design-component texture. Let the sim run ~8 more simulated minutes afterward with no
+NaN bloom, no new console errors, and no visual artifacts at the patch edge (edge-taper shock
+handling is still Phase 6 — none observed yet at this wave climate/footprint size, but the
+Ventura Harbor example wasn't chosen to stress-test that). Same blob-splice approach used to keep
+the diff to the ~19 real lines added.
 
 ---
 
