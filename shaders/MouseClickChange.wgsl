@@ -263,6 +263,17 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             if(r <= 0.5 * globals.designcomponent_Radius) {
                 f = 1.0;
             }
+            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 5) - on first paint of a cell
+            // (component ID transitions from 0 to non-zero), stash the pre-edit bed into the otherwise-unused
+            // .y/.z/.w channels of txDesignComponents, so a future taper (Phase 6) can blend against a fixed
+            // reference instead of the live bed - blending against a live value that keeps getting rewritten
+            // is not idempotent under repeated strokes.
+            if (f == 1.0 && B_here.x == 0.0) {
+                let original_bed = textureLoad(txBottom, idx, 0);
+                B_here.y = original_bed.z;
+                B_here.z = original_bed.x;
+                B_here.w = original_bed.y;
+            }
             dH = (f32(globals.designcomponentToAdd) - B_here.x)*f;
             B_here.x = max(min_val,B_here.x + dH);
 

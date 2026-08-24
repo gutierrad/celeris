@@ -22,7 +22,7 @@ Status values: `NOT STARTED` · `IN PROGRESS` · `DONE` · `BLOCKED` · `SKIPPED
 | 2 | Uniform buffer plumbing | DONE |
 | 3 | Shader branch — bathy from component footprint | DONE |
 | 4 | JS dispatch + texture copy block | DONE |
-| 5 | Original-bed stash (idempotence + undo) | NOT STARTED |
+| 5 | Original-bed stash (idempotence + undo) | DONE |
 | 6 | Footprint and edge-taper reconciliation | NOT STARTED |
 | 7 | Integration checks (sed transport, sea level, export, 3D, agent API) | NOT STARTED |
 | 8 | Manual test matrix + docs | NOT STARTED |
@@ -360,30 +360,54 @@ the diff to the ~19 real lines added.
 
 ### Phase 5 — Original-bed stash (idempotence + undo)
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 `txDesignComponents.y/.z/.w` are unused and already round-trip through the shader. Use them to
 store the pre-edit bed so that (a) taper blending is computed against a fixed reference rather
 than the live bed, making repeated strokes idempotent, and (b) erasing a component can restore
 the original bathymetry.
 
-- [ ] On the first paint of a cell (component ID transitions from 0 to non-zero), stash the
-      original `B.z/.x/.y` into `txDesignComponents.y/.z/.w`
-- [ ] Compute the tapered target as a blend between `designcomponent_TargetElev` and the
-      **stashed** original, never the live `txBottom` value
-- [ ] Decide and document restore-on-erase behavior: when a cell's component ID is cleared, does
-      the bed revert? (Recommended: yes, and it makes the feature safely reversible.) Note that
-      there is currently no erase UI — component values are 1–10 only — so this may just be
-      plumbing for later.
-- [ ] Confirm the stash survives the texture export at `js/main.js:3650`
-      (`downloadTextureData(device, txDesignComponents, ...)`) and note what the extra channels
-      mean for any downstream consumer of that file
+- [x] On first paint of a cell (`f == 1.0 && B_here.x == 0.0`, i.e. component ID transitioning
+      from 0 to non-zero), stash the pre-edit `txBottom` values into `txDesignComponents.y/.z/.w`
+      (`.z→.y`, `.x→.z`, `.y→.w`). Lives in the `else` (plain component-add) branch of the compute
+      block, ~line 260 of `shaders/MouseClickChange.wgsl` — applies to all ten components sharing
+      this texture, not just mangroves, matching the "mechanical to extend later" decision.
+- [ ] **Not done — deferred to Phase 6, as that phase's own checklist specifies.** There is no
+      taper yet: `calc_component_bathy_elevation` (Phase 3) returns `designcomponent_TargetElev`
+      unconditionally inside the hard-edged disc, so it doesn't blend against *anything* today —
+      live or stashed. Phase 5's exit criterion of idempotence under repeated strokes already holds
+      for this reason alone (confirmed below), independent of the stash. The stash exists now so
+      Phase 6 has a fixed reference ready when it adds the actual taper ramp.
+- [x] **Decision: restore-on-erase should happen, recommended.** Not implemented — there is no
+      erase UI (`designcomponentToAdd` is 1–10 only, no "0 = erase" option), so per the checklist's
+      own allowance this is plumbing only. The stash data is sitting in the texture, ready for a
+      future erase feature to read.
+- [x] Checked the export path (`js/main.js:3680`,
+      `downloadTextureData(device, txDesignComponents, 1, filename, readbackBuffer)`): the `1`
+      argument is a 1-indexed **single-channel** selector (`File_Writer.js`'s `readTextureData`,
+      `chanOffset = channel - 1`), not a channel count — this export writes only `.x` (the
+      component ID) and silently drops `.y/.z/.w`. Also confirmed there is no re-import path for
+      `current_designcomponents.bin` anywhere in `File_Loader.js` / `Model_Loaders.js` — these
+      `current_*.bin` files are one-way debug dumps, not part of scenario save/load. So the stash
+      not surviving this particular export is a non-issue: nothing reads the file back, and normal
+      scenario persistence is a separate mechanism this phase didn't touch.
 
 **Exit criteria:** painting the same spot 100 times produces the identical bed as painting it
 once; original bed is recoverable.
 
 **Notes:**
-_(fill in after completion)_
+Verified live (Claude in Chrome, macOS browser, Ventura Harbor Boussinesq example). Shader
+compiled cleanly with the stash branch added. Painted the same spot three separate times (5
+mousemove events each, 15 total) with Mangroves + set-bathy enabled: all 15 fired the full
+`Updating Design Components` → `Setting Mangrove Bathy/Topo to Target Elevation` → `Updating
+neardry & tridiag coef due to mangrove bathy set` sequence, zero errors. Switched to the
+`Bathymetry/Topography (m)` plot and confirmed the resulting patch is a single consolidated blob
+matching the stroke shape — no growth, bleeding, or intensification from the repeated strokes,
+confirming idempotence. (As noted above, idempotence currently follows from Phase 3's hard-edged
+"set exactly" elevation function having no dependency on prior bed state at all — the stash isn't
+load-bearing for *this* phase's exit criterion yet, but is exactly what Phase 6 needs to keep that
+property once a taper is introduced.) Same blob-splice approach used to keep the diff to the ~11
+real lines added.
 
 ---
 
