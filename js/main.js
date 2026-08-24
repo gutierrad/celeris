@@ -1377,6 +1377,13 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
         MouseClickChange_view.setInt32(92, calc_constants.designcomponent_AddLinearStructure, true);             // i32
     }
     updateMouseClickLinearStructureUniforms();
+    // CODEX: Mangrove bathy/topo set-elevation uniforms (mangroves branch, Phase 2). Used starting Phase 3.
+    function updateMouseClickDesignBathyUniforms() {
+        MouseClickChange_view.setInt32(96, calc_constants.designcomponent_SetBathy, true);             // i32
+        MouseClickChange_view.setFloat32(100, calc_constants.designcomponent_TargetElev, true);             // f32
+        MouseClickChange_view.setFloat32(104, calc_constants.designcomponent_EdgeTaper, true);             // f32
+    }
+    updateMouseClickDesignBathyUniforms();
 
     // ExtractTimeSeries -  Bindings & Uniforms Config
     const ExtractTimeSeries_BindGroupLayout = create_ExtractTimeSeries_BindGroupLayout(device);
@@ -2521,11 +2528,15 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
                 else if(calc_constants.designcomponentToAdd == 8) {calc_constants.designcomponent_Friction = calc_constants.designcomponent_Fric_Dune;} 
                 else if(calc_constants.designcomponentToAdd == 9) {calc_constants.designcomponent_Friction = calc_constants.designcomponent_Fric_Berm;} 
                 else if(calc_constants.designcomponentToAdd == 10) {calc_constants.designcomponent_Friction = calc_constants.designcomponent_Fric_Seawall;} 
+                // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 2) - active values reset to inert (0) for every component except mangroves.
+                calc_constants.designcomponent_TargetElev = (calc_constants.designcomponentToAdd == 3) ? calc_constants.designcomponent_Elev_Mangrove : 0.0;
+                calc_constants.designcomponent_SetBathy = (calc_constants.designcomponentToAdd == 3) ? calc_constants.designcomponent_SetBathy_Mangrove : 0;
                 MouseClickChange_view.setFloat32(56, calc_constants.designcomponent_Friction, true);             // f32
                 MouseClickChange_view.setFloat32(60, calc_constants.changeSeaLevel_delta, true);             // f32
                 calc_constants.changeSeaLevel_delta = 0.0; // once the change is added once, set to zero
                 // CODEX: Upload pending linear-structure parameters before running MouseClickChange.wgsl.
                 updateMouseClickLinearStructureUniforms();
+                updateMouseClickDesignBathyUniforms();
 
                 runComputeShader(device, MouseClickChange_uniformBuffer, MouseClickChange_uniforms, MouseClickChange_Pipeline, MouseClickChange_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  // update depth/friction based on mouse click
                 if(calc_constants.whichPanelisOpen == 3){
