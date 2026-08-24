@@ -104,15 +104,22 @@ fn calc_linear_structure_elevation(xloc: f32, yloc: f32) -> f32 {
     return globals.designcomponent_CrestElev - globals.designcomponent_SideSlope * side_distance;
 }
 
-// CODEX: Mangrove bathy/topo set-elevation footprint (mangroves branch, Phase 3). Hard-edged disc;
-// taper is added in Phase 6. Returns current_bed unchanged outside the footprint so callers can
-// apply set-exactly semantics via max(min_val, ...) without a separate branch for "outside".
-fn calc_component_bathy_elevation(xloc: f32, yloc: f32, current_bed: f32) -> f32 {
+// CODEX: Mangrove bathy/topo set-elevation footprint (mangroves branch, Phase 6). Full target inside
+// (outer_radius - EdgeTaper), ramping linearly to the stashed pre-edit bed (Phase 5) at outer_radius,
+// unchanged (current_bed) outside - so callers can apply set-exactly semantics via max(min_val, ...)
+// without a separate branch for "outside". Ramps to the *stashed* bed, not current_bed, so repeated
+// strokes stay idempotent (blending against a live value that keeps getting rewritten is not).
+fn calc_component_bathy_elevation(xloc: f32, yloc: f32, current_bed: f32, stashed_bed: f32) -> f32 {
     let xo = globals.xClick * globals.dx;
     let yo = globals.yClick * globals.dy;
     let r = calc_radial_distance(xloc, yloc, xo, yo);
-    if (r <= 0.5 * globals.designcomponent_Radius) {
+    let outer_radius = 0.5 * globals.designcomponent_Radius;
+    let inner_radius = max(0.0, outer_radius - globals.designcomponent_EdgeTaper);
+    if (r <= inner_radius) {
         return globals.designcomponent_TargetElev;
+    } else if (r <= outer_radius) {
+        let w = (r - inner_radius) / max(outer_radius - inner_radius, 1.0e-6);
+        return mix(globals.designcomponent_TargetElev, stashed_bed, w);
     }
     return current_bed;
 }
@@ -244,10 +251,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             target_elev = calc_linear_structure_elevation(xloc + 0.5 * globals.dx, yloc);
             B_here.y = max(B_here.y, max(min_val, target_elev));
         } else if (globals.designcomponent_SetBathy == 1) {
-            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 3) - set exactly inside the footprint, existing bed outside.
-            B_here.z = max(min_val, calc_component_bathy_elevation(xloc, yloc, B_here.z));
-            B_here.x = max(min_val, calc_component_bathy_elevation(xloc, yloc + 0.5 * globals.dy, B_here.x));
-            B_here.y = max(min_val, calc_component_bathy_elevation(xloc + 0.5 * globals.dx, yloc, B_here.y));
+            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 3/6) - set exactly inside the footprint, tapered near the edge, existing bed outside.
+            let stash = textureLoad(txDesignComponents, idx, 0);
+            B_here.z = max(min_val, calc_component_bathy_elevation(xloc, yloc, B_here.z, stash.y));
+            B_here.x = max(min_val, calc_component_bathy_elevation(xloc, yloc + 0.5 * globals.dy, B_here.x, stash.z));
+            B_here.y = max(min_val, calc_component_bathy_elevation(xloc + 0.5 * globals.dx, yloc, B_here.y, stash.w));
 
             // Free-surface fix: keep eta at or above the (possibly raised) bed; zero momentum in cells that just went dry.
             let newly_dry = B_here.z > B_here2.x;

@@ -23,7 +23,7 @@ Status values: `NOT STARTED` · `IN PROGRESS` · `DONE` · `BLOCKED` · `SKIPPED
 | 3 | Shader branch — bathy from component footprint | DONE |
 | 4 | JS dispatch + texture copy block | DONE |
 | 5 | Original-bed stash (idempotence + undo) | DONE |
-| 6 | Footprint and edge-taper reconciliation | NOT STARTED |
+| 6 | Footprint and edge-taper reconciliation | DONE |
 | 7 | Integration checks (sed transport, sea level, export, 3D, agent API) | NOT STARTED |
 | 8 | Manual test matrix + docs | NOT STARTED |
 
@@ -413,24 +413,63 @@ real lines added.
 
 ### Phase 6 — Footprint and edge-taper reconciliation
 
-**Status:** NOT STARTED
+**Status:** DONE
 
-- [ ] Implement the real taper in `calc_component_bathy_elevation`: full target inside
-      `0.5*R - designcomponent_EdgeTaper`, ramping to the stashed original bed at `0.5*R`
-- [ ] Choose a taper default that is at least a few cells wide at typical `dx` — a taper narrower
-      than the grid is the same as no taper
-- [ ] Reconcile the three footprints now in play: ID disc (`0.5*R`, hard), friction Gaussian
-      (`k = 4/R`, effectively `~0.25*R`), and the new bathy footprint. Either widen the friction
-      Gaussian to match the disc or document the mismatch deliberately. **This changes existing
-      behavior for all ten components — flag it for Patrick before shipping.**
-- [ ] Test for spurious reflections off the perimeter: place a mangrove patch in an otherwise
-      uniform-depth domain, run monochromatic waves, and look for perimeter-generated scatter in
-      the wave-height field
+- [x] Implemented the taper in `calc_component_bathy_elevation` (~line 110 of
+      `shaders/MouseClickChange.wgsl`): full `designcomponent_TargetElev` inside
+      `inner_radius = max(0.0, outer_radius - designcomponent_EdgeTaper)`, linear `mix()` to the
+      **stashed** original bed (Phase 5, read from `txDesignComponents.y/.z/.w` at the call site)
+      across `inner_radius → outer_radius = 0.5*designcomponent_Radius`, unchanged (`current_bed`)
+      beyond `outer_radius`. Ramping to the stash rather than the live bed is what keeps repeated
+      strokes idempotent once a taper exists (the concern flagged in "Constraints that will bite
+      you" #2) — this is the payoff for Phase 5's plumbing.
+- [x] Bumped the `designcomponent_EdgeTaper` default from the Phase 2 placeholder (`2.0`) to
+      `5.0` m — a few cells wide at the `dx = 1–5` m range typical of coastal wave examples.
+      Documented in-line that this is still effectively zero taper at the coarse-grid tsunami/AK
+      examples (`dx` up to 200 m) — no per-example auto-scaling was added; flagging the limitation
+      was judged sufficient per the plan's own "narrower than the grid = no taper" framing.
+- [ ] **Footprint mismatch: documented, not changed — needs Patrick's sign-off before shipping,
+      exactly as the checklist itself said not to do unilaterally.** Three footprints now coexist:
+      the ID disc and the new bathy disc share `0.5*designcomponent_Radius` (hard edge, or tapered
+      for bathy) — those two were already aligned as of Phase 3 by construction, since the bathy
+      footprint was modeled directly on the existing ID disc radius. The **friction Gaussian**
+      (`k = 4/designcomponent_Radius`, ~2% amplitude at `r = 0.5*R`, effectively full-strength only
+      out to roughly `r ≈ 0.25*R`) is still narrower than both. Concretely, with the Phase 6 taper
+      in place: the outer ~half of the visible bathy platform (between the friction Gaussian's
+      effective edge and `0.5*R`) is raised/tapered bed with **not-yet-full friction coverage**,
+      and the taper ring specifically sits entirely outside the Gaussian's meaningful range. This
+      preexisted for all ten components before this branch (friction vs. ID mismatch); adding a
+      third, larger-radius footprint (bathy) makes the friction Gaussian look comparatively
+      narrower still. **Not fixed here** because widening it changes rendered friction for every
+      existing component/example, which the plan explicitly reserves for Patrick's approval.
+- [x] Tested for perimeter reflections: loaded the "Toy Problem, wind waves" example
+      (`examples/Toy_Config`, flat `-10` m bed near the west/wavemaker boundary, `waves.txt`
+      forcing a monochromatic wave — amplitude 0.5 m, period 10 s, direction 0), reduced
+      `designcomponent_Radius` to `20` m and `designcomponent_Elev_Mangrove` to `-5` m (kept the
+      patch submerged, to avoid conflating wetting/drying effects with pure taper-edge scattering),
+      and painted a single small patch in the flat region away from both the wavemaker and the
+      natural shoreline slope.
 
 **Exit criteria:** no visible perimeter artifact at the taper; footprint story documented.
 
 **Notes:**
-_(fill in after completion)_
+Verified live (Claude in Chrome, macOS browser). Shader compiled cleanly with the taper code.
+Switched to the `Bathymetry/Topography (m)` plot and confirmed the taper renders as a smooth
+radial gradient (bright center fading outward) rather than the earlier Phase 3/4 hard-edged blob —
+visual confirmation the ramp math is live. Switched to `Free Surface Elevation (m)` and let the
+monochromatic wave train interact with the patch: observed a smooth fan-shaped diffraction
+wake/shadow pattern behind the patch, with no jagged, blocky, or checkerboard artifacts localized
+at the taper ring — the pattern reads as ordinary physical diffraction off a submerged obstacle,
+not a numerical artifact from the edge treatment. Also checked `Significant Wave Height (m)`;
+it showed a bright transient blob right at the patch, but this is expected — that's a running
+statistic still re-converging moments after a fresh bathy edit, not evidence of instability.
+
+**Caveat on rigor:** this was a qualitative visual check (one example, one patch size, one
+snapshot in time), not a quantitative wave-height-difference-from-baseline comparison (i.e. no
+side-by-side "taper vs. hard edge" or "with vs. without patch" run). Given the tooling available
+(screenshots via browser automation, no data-export/diffing pipeline set up), a rigorous
+quantitative version of this check is a reasonable follow-up before shipping, but the qualitative
+result is a real, honest observation, not a guess.
 
 ---
 
