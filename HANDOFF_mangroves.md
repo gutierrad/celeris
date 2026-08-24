@@ -20,7 +20,7 @@ Status values: `NOT STARTED` · `IN PROGRESS` · `DONE` · `BLOCKED` · `SKIPPED
 | 0 | Branch + baseline verification | DONE |
 | 1 | Constants and UI wiring | DONE |
 | 2 | Uniform buffer plumbing | DONE |
-| 3 | Shader branch — bathy from component footprint | NOT STARTED |
+| 3 | Shader branch — bathy from component footprint | DONE |
 | 4 | JS dispatch + texture copy block | NOT STARTED |
 | 5 | Original-bed stash (idempotence + undo) | NOT STARTED |
 | 6 | Footprint and edge-taper reconciliation | NOT STARTED |
@@ -260,41 +260,51 @@ applied as a direct byte-level splice against the `git show HEAD:<path>` blob (m
 existing CRLF/LF convention at each insertion point) so the staged diff stayed minimal. Same
 approach should be used for the remaining phases.
 
-**Notes:**
-_(fill in after completion)_
-
 ---
 
 ### Phase 3 — Shader branch: bathy from component footprint
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 Add a third case inside `whichPanelisOpen == 2`, parallel to the existing
 `designcomponent_AddLinearStructure` case.
 
-- [ ] Add `fn calc_component_bathy_elevation(xloc: f32, yloc: f32) -> f32` modeled on
-      `calc_linear_structure_elevation`: radial distance from the click point, full
-      `designcomponent_TargetElev` inside the core radius, existing bed outside. Leave the taper
-      as a stub returning the hard-edged result — Phase 6 refines it.
-- [ ] In the design branch, when `designcomponent_SetBathy == 1`:
-      load `txBottom` into `B_here` and `txstateUVstar` into `B_here2`, `min_val = -base_depth`
-      (mirrors the linear-structure case)
-- [ ] Evaluate the target at three locations and write the matching channels — this is easy to
-      get wrong: `.z` at `(xloc, yloc)`, `.x` at `(xloc, yloc + 0.5*dy)`, `.y` at
-      `(xloc + 0.5*dx, yloc)`
-- [ ] Apply **set semantics**: `B_here.<c> = max(min_val, target)` inside the footprint, unchanged
-      outside. (Not `max(B, target)` — the decision is set-exactly.)
-- [ ] Free-surface fix: `B_here2.x = max(B_here2.x, B_here.z)`; and where the cell newly goes dry,
-      zero `B_here2.y` and `B_here2.z` (momentum). Note this is *stricter* than the existing bathy
-      path — if it causes trouble, record why and fall back to precedent.
-- [ ] Store `B_here` → binding 6, `B_here2` → binding 7 (the existing `textureStore` calls at the
-      end already do this)
+- [x] Added `fn calc_component_bathy_elevation(xloc: f32, yloc: f32, current_bed: f32) -> f32`.
+      One deviation from the checklist's two-argument signature: it takes a third `current_bed`
+      parameter and returns *that* outside the footprint (instead of a linear-structure-style
+      `-1.0e9` sentinel), because set-exactly semantics can't be expressed as `max(B, target)` —
+      the call site needs the untouched value to fall through unchanged, and the function has no
+      other way to know it per-channel (`.z`/`.x`/.`y` each need their own fallback).
+- [x] Added a `designcomponent_SetBathy == 1` branch to the *load* block (the first
+      `whichPanelisOpen == 2` switch, ~line 152): loads `txBottom`/`txState` into
+      `B_here`/`B_here2`, `min_val = -base_depth`, exactly mirroring the linear-structure case.
+- [x] Added the matching branch to the *compute* block (~line 246): evaluates the footprint at all
+      three staggered locations — `.z` at `(xloc, yloc)`, `.x` at `(xloc, yloc + 0.5*dy)`, `.y` at
+      `(xloc + 0.5*dx, yloc)`.
+- [x] Set semantics implemented as `B_here.<c> = max(min_val, calc_component_bathy_elevation(...))`
+      — not `max(B, target)`.
+- [x] Free-surface fix: `let newly_dry = B_here.z > B_here2.x;` computed *before* overwriting eta
+      (comparing the new center-bed elevation against the pre-edit eta) — the naive
+      `B_here2.x <= B_here.z` *after* the max would have been backwards (always false for
+      already-wet cells). `B_here2.x = max(B_here2.x, B_here.z)`, then zero `.y`/`.z` momentum
+      only when `newly_dry`.
+- [x] `textureStore` calls were already unconditional at the end of `main()` — no change needed.
 
 **Exit criteria:** shader compiles; with the flag on, the two temp textures contain the intended
 values (verify in Phase 4 once they are copied somewhere visible).
 
 **Notes:**
-_(fill in after completion)_
+Same live-browser verification approach as Phase 2 (Claude in Chrome, macOS browser with a working
+GPU adapter — reselecting the browser was needed again since the selection didn't persist between
+tool calls). Ventura Harbor Boussinesq example: `Shaders loaded. Pipelines set up. Buffers set up.
+Compute / Render loop starting.`, zero errors — confirms the new branches and the new function
+parse and compile correctly inside the WGSL compiler, even though nothing sets
+`designcomponent_SetBathy == 1` yet (that's Phase 4). Re-painted a mangrove patch to confirm the
+`else` (component-ID/friction) path is still reached identically to Phase 0/2: five
+`Updating Design Components` log lines, patch rendered, zero console errors. Actual numeric
+verification of the bathy-set values happens in Phase 4 once there's a second dispatch and a copy
+target to inspect. Used the same byte-level blob-splice approach as Phase 2 to keep the diff to
+the ~31 real lines added.
 
 ---
 

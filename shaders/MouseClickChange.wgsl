@@ -104,6 +104,19 @@ fn calc_linear_structure_elevation(xloc: f32, yloc: f32) -> f32 {
     return globals.designcomponent_CrestElev - globals.designcomponent_SideSlope * side_distance;
 }
 
+// CODEX: Mangrove bathy/topo set-elevation footprint (mangroves branch, Phase 3). Hard-edged disc;
+// taper is added in Phase 6. Returns current_bed unchanged outside the footprint so callers can
+// apply set-exactly semantics via max(min_val, ...) without a separate branch for "outside".
+fn calc_component_bathy_elevation(xloc: f32, yloc: f32, current_bed: f32) -> f32 {
+    let xo = globals.xClick * globals.dx;
+    let yo = globals.yClick * globals.dy;
+    let r = calc_radial_distance(xloc, yloc, xo, yo);
+    if (r <= 0.5 * globals.designcomponent_Radius) {
+        return globals.designcomponent_TargetElev;
+    }
+    return current_bed;
+}
+
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -133,6 +146,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         // min_val = 0.0;
         // CODEX: Linear structures share this panel but edit bathy/topo instead of design-component IDs.
         if (globals.designcomponent_AddLinearStructure == 1) {
+            B_here = textureLoad(txBottom, idx, 0);
+            B_here2 = textureLoad(txState, idx, 0);
+            min_val = -globals.base_depth;
+        } else if (globals.designcomponent_SetBathy == 1) {
+            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 3).
             B_here = textureLoad(txBottom, idx, 0);
             B_here2 = textureLoad(txState, idx, 0);
             min_val = -globals.base_depth;
@@ -225,6 +243,19 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
             target_elev = calc_linear_structure_elevation(xloc + 0.5 * globals.dx, yloc);
             B_here.y = max(B_here.y, max(min_val, target_elev));
+        } else if (globals.designcomponent_SetBathy == 1) {
+            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 3) - set exactly inside the footprint, existing bed outside.
+            B_here.z = max(min_val, calc_component_bathy_elevation(xloc, yloc, B_here.z));
+            B_here.x = max(min_val, calc_component_bathy_elevation(xloc, yloc + 0.5 * globals.dy, B_here.x));
+            B_here.y = max(min_val, calc_component_bathy_elevation(xloc + 0.5 * globals.dx, yloc, B_here.y));
+
+            // Free-surface fix: keep eta at or above the (possibly raised) bed; zero momentum in cells that just went dry.
+            let newly_dry = B_here.z > B_here2.x;
+            B_here2.x = max(B_here2.x, B_here.z);
+            if (newly_dry) {
+                B_here2.y = 0.0;
+                B_here2.z = 0.0;
+            }
         } else {
             var r = calc_radial_distance(xloc,yloc,xo,yo);
             var dH = 0.0;
