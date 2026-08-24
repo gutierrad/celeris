@@ -19,7 +19,7 @@ Status values: `NOT STARTED` · `IN PROGRESS` · `DONE` · `BLOCKED` · `SKIPPED
 |---|-------|--------|
 | 0 | Branch + baseline verification | DONE |
 | 1 | Constants and UI wiring | DONE |
-| 2 | Uniform buffer plumbing | NOT STARTED |
+| 2 | Uniform buffer plumbing | DONE |
 | 3 | Shader branch — bathy from component footprint | NOT STARTED |
 | 4 | JS dispatch + texture copy block | NOT STARTED |
 | 5 | Original-bed stash (idempotence + undo) | NOT STARTED |
@@ -221,24 +221,44 @@ unchanged by construction, not just by testing. Uniform plumbing is Phase 2.
 
 ### Phase 2 — Uniform buffer plumbing
 
-**Status:** NOT STARTED
+**Status:** DONE
 
-- [ ] `shaders/MouseClickChange.wgsl`: append to `Globals`, in this order, after
+- [x] `shaders/MouseClickChange.wgsl`: appended to `Globals`, after
       `designcomponent_AddLinearStructure`:
       `designcomponent_SetBathy: i32` (offset 96),
       `designcomponent_TargetElev: f32` (100),
-      `designcomponent_EdgeTaper: f32` (104, metres — used in Phase 6, write it now)
-- [ ] `js/main.js`: add `updateMouseClickDesignBathyUniforms()` next to
-      `updateMouseClickLinearStructureUniforms()` (~1369) writing offsets 96/100/104; call it from
-      both the init block (~1379) and the click block (~2528)
-- [ ] In the click block's `designcomponentToAdd` if-chain (2514–2523), set
-      `calc_constants.designcomponent_TargetElev` and the active `SetBathy` flag from the mangrove
-      constants when `designcomponentToAdd == 3`, and to `0` otherwise — so other components stay
-      untouched
-- [ ] Verify the 256-byte buffer is still large enough (it is: 108 < 256) and that the shader
-      still compiles (any struct mismatch shows as a WebGPU validation error in the console)
+      `designcomponent_EdgeTaper: f32` (104, unused until Phase 6)
+- [x] `js/main.js`: added `updateMouseClickDesignBathyUniforms()` next to
+      `updateMouseClickLinearStructureUniforms()` (~1381) writing offsets 96/100/104; called from
+      both the init block (~1386) and the click block (~2539)
+- [x] In the click block, after the `designcomponentToAdd` if-chain (~2531): set
+      `calc_constants.designcomponent_TargetElev` and `designcomponent_SetBathy` from the mangrove
+      constants when `designcomponentToAdd == 3`, and to `0` otherwise, via a ternary rather than
+      touching each of the 10 existing friction branches — same net effect, smaller diff.
+- [x] `js/constants_load_calc.js`: added the "active value" pair `designcomponent_TargetElev` /
+      `designcomponent_SetBathy` (mirroring the existing `designcomponent_Friction` active value),
+      plus `designcomponent_EdgeTaper` default (`2.0` m) — none of these were in the original
+      checklist but were needed so the new uniform writes don't upload `undefined`/`NaN`.
+- [x] Verified the 256-byte buffer is still large enough (108 < 256) and the shader compiles.
 
 **Exit criteria:** shader compiles, uniforms upload, flag defaults to 0, behavior unchanged.
+
+**Notes:**
+Verified live via the Claude in Chrome extension (`@browser`, connected to a macOS browser with a
+working GPU — the first connected browser had no WebGPU adapter at all, unrelated to this work).
+Loaded the Ventura Harbor Boussinesq example: console showed `Shaders loaded. Pipelines set up.
+Buffers set up. Compute / Render loop starting.` with no errors, confirming the grown `Globals`
+struct still matches the JS-side uniform layout. Painted a mangrove patch (design panel →
+Mangroves → drag on canvas): `whichPanelisOpen` → 2, `designcomponentToAdd` → 3, five
+`Updating Design Components` log lines during the drag, patch rendered visibly on the design
+overlay, zero console errors. `designcomponent_SetBathy_Mangrove` was left at its Phase 1 default
+(`No`), so the shader took the inert `else` branch exactly as before — confirms Phase 2 changed
+nothing observable, as intended. Repo-hygiene note: editing these files with the Edit tool
+silently re-normalizes the entire file's line endings against this exFAT checkout's mixed
+CRLF/LF blobs, turning a 4-line change into a 2000+ line diff; every Phase 2 edit was instead
+applied as a direct byte-level splice against the `git show HEAD:<path>` blob (matching the
+existing CRLF/LF convention at each insertion point) so the staged diff stayed minimal. Same
+approach should be used for the remaining phases.
 
 **Notes:**
 _(fill in after completion)_

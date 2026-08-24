@@ -24,6 +24,10 @@ struct Globals {
     designcomponent_EndX: f32,
     designcomponent_EndY: f32,
     designcomponent_AddLinearStructure: i32,
+    // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 2). Used starting Phase 3.
+    designcomponent_SetBathy: i32,
+    designcomponent_TargetElev: f32,
+    designcomponent_EdgeTaper: f32,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
