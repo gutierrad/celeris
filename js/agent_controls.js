@@ -414,6 +414,39 @@ export function installCelerisAgentControls({
         };
     }
 
+    // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 7) - place one platform and fire the paint immediately, mirroring requestAddLinearStructure's fire-on-call pattern rather than setSurfaceComponent's arm-only pattern, since there's no multi-step endpoint state to validate first.
+    function placeMangrovePlatform(args = {}) {
+        const elevation = Number(args.elevation_m);
+        const xWorld = Number(args.x_m);
+        const yWorld = Number(args.y_m);
+        if (!Number.isFinite(elevation) || !Number.isFinite(xWorld) || !Number.isFinite(yWorld)) {
+            throw new Error("Placing a mangrove platform requires elevation_m, x_m, and y_m.");
+        }
+        enterDesignPanelMode();
+        setDesignInteractionMode?.("surface");
+        updateCalcConstants("designcomponentToAdd", DESIGN_COMPONENTS.mangrove.value);
+        const radius = Number(args.radius_m);
+        if (args.radius_m !== null && args.radius_m !== undefined && Number.isFinite(radius)) {
+            updateCalcConstants("designcomponent_Radius", radius);
+        }
+        updateCalcConstants("designcomponent_Elev_Mangrove", elevation);
+        updateCalcConstants("designcomponent_SetBathy_Mangrove", 1);
+        const constants = currentCalcConstants();
+        updateCalcConstants("xClick", xWorld / constants.dx);
+        updateCalcConstants("yClick", yWorld / constants.dy);
+        updateCalcConstants("click_update", 1);
+        updateAllUIElements();
+        return {
+            namespace: "design",
+            action: "place_mangrove_platform",
+            status: "applied",
+            x_m: xWorld,
+            y_m: yWorld,
+            elevation_m: elevation,
+            radius_m: currentCalcConstants().designcomponent_Radius,
+        };
+    }
+
     function prepareLinearStructure(args = {}) {
         const crestElevation = Number(args.crest_elevation_m);
         const crestWidth = Number(args.crest_width_m);
@@ -733,6 +766,9 @@ export function installCelerisAgentControls({
         if (id === "design.set_surface_component") {
             return setSurfaceComponent(command.args || {});
         }
+        if (id === "design.place_mangrove_platform") {
+            return placeMangrovePlatform(command.args || {});
+        }
         if (id === "design.prepare_linear_structure") {
             return prepareLinearStructure(command.args || {});
         }
@@ -914,6 +950,7 @@ export function installCelerisAgentControls({
             "view.enter_fullscreen": validLabels(FULLSCREEN_STATES),
             "view.exit_fullscreen_cleanup": [],
             "design.set_surface_component": validLabels(DESIGN_COMPONENTS),
+            "design.place_mangrove_platform": ["x_m, y_m, elevation_m, radius_m?"],
             "design.prepare_linear_structure": ["crest elevation, crest width, side slope"],
             "design.confirm_linear_start": [],
             "design.confirm_linear_end_and_add": [],

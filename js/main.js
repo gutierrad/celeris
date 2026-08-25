@@ -2588,6 +2588,12 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
                             updateMouseClickDesignBathyUniforms();
                             runComputeShader(device, MouseClickChange_uniformBuffer, MouseClickChange_uniforms, MouseClickChange_Pipeline, MouseClickChange_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  // update bathy/topo to mangrove target elevation
                             runCopyTextures(device, calc_constants, txtemp_MouseClick, txBottom)
+                            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 7) - deliberately NOT updating txBottomInitial here,
+                            // matching the existing surfaceToChange==1 precedent above. Consequence: "Depth Change due to Sed Transport" (surfaceToPlot==21)
+                            // and its export will show a permanent step-change at this platform, indistinguishable from real sediment-transport accretion/erosion,
+                            // when useSedTransModel==1. This is a diagnostic/bookkeeping artifact only - it does not affect the erosion/deposition physics itself,
+                            // which reads live txBottom, not txBottomInitial. See HANDOFF_mangroves.md Phase 7 for the full analysis.
+                            // runCopyTextures(device, calc_constants, txtemp_MouseClick, txBottomInitial)
                             runCopyTextures(device, calc_constants, txtemp_MouseClick2, txstateUVstar)
                             runComputeShader(device, Updateneardry_uniformBuffer, Updateneardry_uniforms, Updateneardry_Pipeline, Updateneardry_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  //need to update tridiagonal coefficients due to change inn depth
                             runCopyTextures(device, calc_constants, txtemp_bottom, txBottom)
