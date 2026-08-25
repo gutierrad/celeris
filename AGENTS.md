@@ -208,6 +208,8 @@ Shader override constants, JS pipeline creation, and JSON config files are all t
 2. The relevant `Handler_*.js` — pipeline constant mapping
 3. The relevant `.wgsl` shader — override declaration and usage
 
+The same three-layer pattern also shows up for parameters delivered through a per-dispatch **uniform buffer** rather than a compile-time pipeline override — the mangrove bathymetry set-elevation feature (`designcomponentToAdd == 3`, painted in the design panel) is a worked example: the default lives in `constants_load_calc.js` (`designcomponent_Elev_Mangrove`, `designcomponent_SetBathy_Mangrove`, `designcomponent_EdgeTaper`), the value is written into the `MouseClickChange` uniform buffer in `js/main.js`'s click-update block (`updateMouseClickDesignBathyUniforms()`) instead of a `Handler_*.js` pipeline constant, and it's declared and consumed in `shaders/MouseClickChange.wgsl`'s `Globals` struct. Changing an offset or field order there requires updating all three in lockstep, same as the override-constant case.
+
 ### .gitignore
 
 `config.json` is in `.gitignore` at the root level. Example configs inside `examples/` directories are tracked, but a root-level `config.json` is not.
