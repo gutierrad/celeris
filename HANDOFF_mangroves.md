@@ -24,7 +24,7 @@ Status values: `NOT STARTED` · `IN PROGRESS` · `DONE` · `BLOCKED` · `SKIPPED
 | 4 | JS dispatch + texture copy block | DONE |
 | 5 | Original-bed stash (idempotence + undo) | DONE |
 | 6 | Footprint and edge-taper reconciliation | DONE |
-| 7 | Integration checks (sed transport, sea level, export, 3D, agent API) | NOT STARTED |
+| 7 | Integration checks (sed transport, sea level, export, 3D, agent API) | DONE |
 | 8 | Manual test matrix + docs | NOT STARTED |
 
 ---
@@ -475,31 +475,99 @@ result is a real, honest observation, not a guess.
 
 ### Phase 7 — Integration checks
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 Each of these is a known coupling that the bathy edit touches.
 
-- [ ] **`txBottomInitial`** — not updated by the existing bathy edit (there is a commented-out
-      line and a note about prescribed motion at ~2534). It is the baseline for sediment
-      bed-change. Decide whether a mangrove platform should shift that baseline; test with
-      `useSedTransModel == 1` either way.
-- [ ] **Sea level change** — paint mangroves, then change sea level, and confirm the platform
-      shifts with the bed (relative sea-level rise) rather than tracking the water surface.
-- [ ] **`txState`/`txNewState`** — the eta fix only lands in `txstateUVstar`, following existing
-      precedent. Verify visually that nothing renders a stale free surface for a frame.
-- [ ] **3D / Explorer view** — `shaders/fragment_testing.wgsl` and `vertex3D.wgsl` render from
-      bathymetry; confirm the raised platform looks right in `viewType == 2` and that the mangrove
-      texture (`textures/mangrove.jpg`, loaded at `js/main.js:727`) still maps sensibly.
-- [ ] **Export/reload** — write out the bathymetry, reload it as an example input, and confirm the
-      platform survives the round trip.
-- [ ] **CelerisAgent** — `js/agent_controls.js` exposes design actions to the agent API. Add the
-      new parameters there if the agent should be able to place mangroves programmatically;
-      otherwise note explicitly that it cannot.
+- [x] **`txBottomInitial`** — **decision: deliberately left unupdated**, matching the existing
+      `surfaceToChange==1` precedent (`js/main.js:2548`, itself a commented-out line with the same
+      unresolved doubt). Added a matching commented-out line + explanation in the mangrove branch
+      (`js/main.js` ~2590). Grounded in the actual shader math, not guessed: `txBottomInitial` is a
+      one-time snapshot taken at `frame_count==0` (`js/main.js:2291`) and is read in exactly one
+      place that matters, `shaders/SedTrans_UpdateBottom.wgsl:117`
+      (`dB_cumulative = B_new - textureLoad(txBottomInitial, idx, 0)`) — a **diagnostic/bookkeeping
+      output** (`txBotChange_Sed`, rendered as "Depth Change due to Sed Transport",
+      `surfaceToPlot==21`), not an input to the erosion/deposition rate physics itself (Pass1/Pass3
+      read live `txBottom` directly, never `txBottomInitial`). Consequence of not updating it: that
+      diagnostic (and its export, `current_SedTransDepthChange.bin`) will show a permanent
+      step-change at every mangrove platform, indistinguishable from real sediment-transport
+      accretion/erosion. No physics-breaking effect, no crash, no divergence — confirmed live:
+      enabled `useSedTransModel` via the agent API and painted a mangrove platform, full clean
+      dispatch sequence, zero console errors.
+- [x] **Sea level change** — verified live: painted a mangrove platform at target elevation `5.00`
+      m (confirmed via hover tooltip reading exactly `5.00`), then raised sea level by `+2` m via
+      the "Modify Sea Level & Edit Bathy/Topo" panel, then re-hovered the same world coordinate —
+      bathy read exactly `3.00` m (`5 - 2`). The platform shifts with the bed as designed; nothing
+      needed changing, since the mangrove `TargetElev` is absolute and sea-level change is a
+      uniform shift applied to all of `txBottom` including the just-painted cells.
+- [x] **`txState`/`txNewState`** — **confirmed, via code reading, that a real one-sub-step stale
+      window exists** — but it is shared by *every* bathy-edit path (`surfaceToChange==1`, linear
+      structures, mangroves alike), not introduced by this branch. The click path writes only
+      `txstateUVstar` (`js/main.js:2591`); `txState` is refreshed only at the end of each physics
+      `frame_c` iteration (`js/main.js:2930-2931`, `txNewState → txState`). So the first `Pass1`
+      invocation after any bathy edit computes `H = eta − B` against the *new* `B` but the *old*
+      `txState.eta`, self-healing within 1-2 sub-steps. A second, distinct mismatch: the click
+      block's own `UpdateTrid` follow-up reads `current_stateUVstar` (a texture the click path
+      never touches), not the just-updated `txstateUVstar`. No visual glitch was observed in any
+      of the live tests run across Phases 4-7 (dozens of paint events, several `render_step`
+      cycles per frame in every example used), consistent with this being a sub-step-scale, largely
+      imperceptible effect rather than a visible one-frame stale render.
+- [x] **3D / Explorer view** — **corrected a wrong premise in the original checklist**:
+      `shaders/fragment_testing.wgsl` is dead code, never loaded by `js/main.js`; the live pipelines
+      use `shaders/fragment.wgsl` + `shaders/vertex3D.wgsl` for both 2D and Explorer (`viewType==2`)
+      rendering. Component-ID-driven texturing in `fragment.wgsl` (component 3 → `mangrove.jpg`,
+      loaded at `js/main.js:730` into `txSamplePNGs` layer 3, branch at `fragment.wgsl:650-656`) is
+      pre-existing, generic infrastructure keyed off the same `txDesignComponents.r` channel the
+      paint operation already writes — no new plumbing was needed or added. Verified live: switched
+      to `viewType==2`, the 3D scene rendered cleanly (skybox, terrain, water) with zero console
+      errors using bathymetry that included painted mangrove platforms. Did not visually confirm
+      the mangrove texture itself at close range (camera was pointed away from the painted patches
+      and repositioning it was out of scope for this check) — the texturing mechanism is verified
+      by code inspection, not by eye, for this specific item.
+- [x] **Export/reload** — **no round-trip exists today, and this is a pre-existing, general
+      limitation, not mangrove-specific.** The only bathymetry export
+      (`js/main.js:3670-3672`, "Property to Write to File" → "Bathymetry/Topography (m)") writes
+      `current_bathytopo.bin`, a headerless raw `Float32Array` binary
+      (`js/File_Writer.js:downloadTextureData`/`readTextureData`). The only bathymetry *import*
+      (`Load Bathymetry Data File`, `js/File_Loader.js:loadDepthSurface`) expects a whitespace-
+      delimited ASCII grid (`.split('\n')`, matching every example's `bathy.txt`). These formats
+      are incompatible and there is no in-app conversion step — mirrors exactly what Phase 5 already
+      found for `current_designcomponents.bin`. Verified live: triggered the export button with a
+      painted platform present, zero console errors (confirms the readback mechanism itself
+      doesn't break on mangrove-modified `txBottom`). Did **not** verify byte-level correctness of
+      the downloaded file's contents, since the browser session's Downloads folder isn't
+      inspectable from this environment — the live hover-tooltip checks elsewhere in this phase
+      already confirm the underlying GPU texture (`txBottom`) holds the correct values, which is
+      what this export reads directly.
+- [x] **CelerisAgent** — added `design.place_mangrove_platform` (`js/agent_controls.js`, function
+      `placeMangrovePlatform`, registered in `applyCommand` and `validCommands`), args
+      `{x_m, y_m, elevation_m, radius_m?}`. Unlike `setSurfaceComponent` (arms paint mode only,
+      requires a follow-up canvas click) this fires the paint immediately in one call, modeled on
+      `requestAddLinearStructure`'s fire-on-call pattern — appropriate here because there's no
+      multi-step endpoint state to validate first, unlike linear structures. Converts world meters
+      to the grid-index units `xClick`/`yClick` actually expect (`x_m / dx`, `y_m / dy`) — got this
+      wrong on the first attempt during manual verification (assumed meters), corrected by reading
+      `js/main.js:3954-3955`'s existing mouse-to-`xClick` conversion. One call places exactly one
+      circular/tapered patch, same as one mouse click; painting a larger or multi-location area
+      still needs multiple calls, matching how a human dragging the mouse fires repeated
+      `click_update` events. Verified live via `window.CelerisAgentControls.applyCommand(...)` in
+      the browser console: placed three platforms at distinct world coordinates across two
+      examples, each producing the exact expected constants (`designcomponentToAdd=3`,
+      `designcomponent_Elev_Mangrove`, `designcomponent_SetBathy_Mangrove=1`, correctly-converted
+      `xClick`/`yClick`) and the identical clean dispatch sequence seen throughout manual testing;
+      confirmed via hover tooltip that the resulting bathy value at the target coordinate matched
+      the requested `elevation_m` exactly.
 
 **Exit criteria:** each item either verified working or recorded as a known limitation.
 
 **Notes:**
-_(fill in after completion)_
+Research for this phase (code reading across `js/main.js`, `js/File_Writer.js`, `js/File_Loader.js`,
+`js/agent_controls.js`, and the `SedTrans_*`/`fragment`/`vertex3D` shaders) was delegated to an
+Explore subagent to keep this phase's context manageable; findings were spot-checked directly
+(grepped exact line numbers, read the cited code) before being written up here, and one correction
+was made along the way (`fragment_testing.wgsl` being dead code, not the live 3D shader as the
+original checklist assumed). All live verification (sea level, sediment transport, 3D view,
+export trigger, CelerisAgent) was done directly via the Claude in Chrome connection, not delegated.
 
 ---
 
