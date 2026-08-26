@@ -24,6 +24,10 @@ struct Globals {
     designcomponent_EndX: f32,
     designcomponent_EndY: f32,
     designcomponent_AddLinearStructure: i32,
+    // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 2). Used starting Phase 3.
+    designcomponent_SetBathy: i32,
+    designcomponent_TargetElev: f32,
+    designcomponent_EdgeTaper: f32,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -100,6 +104,61 @@ fn calc_linear_structure_elevation(xloc: f32, yloc: f32) -> f32 {
     return globals.designcomponent_CrestElev - globals.designcomponent_SideSlope * side_distance;
 }
 
+// CODEX: Mangrove bathy/topo set-elevation footprint (mangroves branch, Phase 6; reworked 2026-08-25).
+//
+// The taper is defined against the *union* of everything painted with this component, not against the
+// individual disc of the current stroke. Painting is continuous and discs overlap heavily, so a
+// per-disc ring repeatedly cut its own perimeter back down through ground earlier strokes had already
+// flattened - visible as grooves and slopes right through the middle of a merged patch. Any per-disc
+// rule has that failure mode: a cell can land in the taper ring of every stroke that ever touched it
+// and so never reach the target at all.
+//
+// Working from the component-ID map instead removes the whole class of problem. txDesignComponents.x
+// is written by dispatch 1 and copied back before this dispatch runs, so it already includes the
+// current stroke. A cell tapers only by its distance to the nearest cell *outside* the footprint, so
+// the slope follows the outline of the union and the interior is always exactly the target. The result
+// depends only on (ID map, stash, target) - never on the live bed or on stroke order - which makes it
+// idempotent, order-independent, and self-healing: each stroke recomputes the entire footprint from
+// the stashed pre-edit bed, so a cell that was on the edge earlier is flattened once it becomes interior.
+fn footprint_edge_distance(idx: vec2<i32>, ox: f32, oy: f32) -> f32 {
+    let taper = globals.designcomponent_EdgeTaper;
+    // Window just big enough to cover the taper; capped so a large taper on a fine grid cannot blow up
+    // the per-cell cost. Anything further out returns > taper and counts as fully interior anyway.
+    let kx = clamp(i32(ceil(taper / max(globals.dx, 1.0e-6))), 1, 12);
+    let ky = clamp(i32(ceil(taper / max(globals.dy, 1.0e-6))), 1, 12);
+    var best = 1.0e6;
+    for (var jj = -ky; jj <= ky; jj = jj + 1) {
+        for (var ii = -kx; ii <= kx; ii = ii + 1) {
+            let sx = clamp(idx.x + ii, 0, globals.width - 1);
+            let sy = clamp(idx.y + jj, 0, globals.height - 1);
+            let id_s = i32(0.01 + textureLoad(txDesignComponents, vec2<i32>(sx, sy), 0).x);
+            if (id_s != globals.designcomponentToAdd) {
+                let ddx = f32(ii) * globals.dx - ox;
+                let ddy = f32(jj) * globals.dy - oy;
+                best = min(best, sqrt(ddx * ddx + ddy * ddy));
+            }
+        }
+    }
+    return best;
+}
+
+// (ox, oy) offsets the evaluation point inside the cell, so the north and east face elevations taper
+// consistently with the cell centre. Cells outside the footprint are returned unchanged.
+fn calc_component_bathy_elevation(idx: vec2<i32>, ox: f32, oy: f32, current_bed: f32, stashed_bed: f32) -> f32 {
+    let id_here = i32(0.01 + textureLoad(txDesignComponents, idx, 0).x);
+    if (id_here != globals.designcomponentToAdd) {
+        return current_bed;
+    }
+    let target_elev = globals.designcomponent_TargetElev;
+    let taper = globals.designcomponent_EdgeTaper;
+    if (taper <= 0.0) {
+        return target_elev;
+    }
+    let d = footprint_edge_distance(idx, ox, oy);
+    let w = clamp(1.0 - d / taper, 0.0, 1.0);
+    return mix(target_elev, stashed_bed, w);
+}
+
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -129,6 +188,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         // min_val = 0.0;
         // CODEX: Linear structures share this panel but edit bathy/topo instead of design-component IDs.
         if (globals.designcomponent_AddLinearStructure == 1) {
+            B_here = textureLoad(txBottom, idx, 0);
+            B_here2 = textureLoad(txState, idx, 0);
+            min_val = -globals.base_depth;
+        } else if (globals.designcomponent_SetBathy == 1) {
+            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 3).
             B_here = textureLoad(txBottom, idx, 0);
             B_here2 = textureLoad(txState, idx, 0);
             min_val = -globals.base_depth;
@@ -221,12 +285,37 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
             target_elev = calc_linear_structure_elevation(xloc + 0.5 * globals.dx, yloc);
             B_here.y = max(B_here.y, max(min_val, target_elev));
+        } else if (globals.designcomponent_SetBathy == 1) {
+            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 3/6) - set exactly inside the footprint, tapered near the edge, existing bed outside.
+            let stash = textureLoad(txDesignComponents, idx, 0);
+            B_here.z = max(min_val, calc_component_bathy_elevation(idx, 0.0, 0.0, B_here.z, stash.y));
+            B_here.x = max(min_val, calc_component_bathy_elevation(idx, 0.0, 0.5 * globals.dy, B_here.x, stash.z));
+            B_here.y = max(min_val, calc_component_bathy_elevation(idx, 0.5 * globals.dx, 0.0, B_here.y, stash.w));
+
+            // Free-surface fix: keep eta at or above the (possibly raised) bed; zero momentum in cells that just went dry.
+            let newly_dry = B_here.z > B_here2.x;
+            B_here2.x = max(B_here2.x, B_here.z);
+            if (newly_dry) {
+                B_here2.y = 0.0;
+                B_here2.z = 0.0;
+            }
         } else {
             var r = calc_radial_distance(xloc,yloc,xo,yo);
             var dH = 0.0;
             var f = 0.0;
             if(r <= 0.5 * globals.designcomponent_Radius) {
                 f = 1.0;
+            }
+            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 5) - on first paint of a cell
+            // (component ID transitions from 0 to non-zero), stash the pre-edit bed into the otherwise-unused
+            // .y/.z/.w channels of txDesignComponents, so a future taper (Phase 6) can blend against a fixed
+            // reference instead of the live bed - blending against a live value that keeps getting rewritten
+            // is not idempotent under repeated strokes.
+            if (f == 1.0 && B_here.x == 0.0) {
+                let original_bed = textureLoad(txBottom, idx, 0);
+                B_here.y = original_bed.z;
+                B_here.z = original_bed.x;
+                B_here.w = original_bed.y;
             }
             dH = (f32(globals.designcomponentToAdd) - B_here.x)*f;
             B_here.x = max(min_val,B_here.x + dH);

@@ -343,6 +343,10 @@ var calc_constants = {
     // CODEX: Pending action flag for applying the linear structure to bathy/topo through MouseClickChange.wgsl.
     designcomponent_AddLinearStructure: 0, // add linear structure to bathy/topo when 1
     designcomponent_Friction: 0.0, // friction factor of the component currently being added
+    // CODEX: Mangrove bathy/topo set-elevation active values (mangroves branch, Phase 2); mirror designcomponent_Friction above.
+    designcomponent_TargetElev: 0.0, // target bed elevation of the component currently being added
+    designcomponent_SetBathy: 0, // whether the component currently being added sets bathy/topo to designcomponent_TargetElev
+    designcomponent_EdgeTaper: 5.0, // CODEX: edge taper width (m) for set-bathy footprint (mangroves branch, Phase 6); a few dx wide at typical dx=1-5m, but effectively zero taper at coarse-grid (dx>~10m) examples
     designcomponent_Fric_Coral: 0.1, // Coral Reef  friction factor
     designcomponent_Fric_Oyser: 0.035, // Mussel/Oyster Bed friction factor
     designcomponent_Fric_Mangrove: 0.15, // Mangroves friction factor
@@ -353,6 +357,9 @@ var calc_constants = {
     designcomponent_Fric_Dune: 0.03, // Vegetated Dune friction factor
     designcomponent_Fric_Berm: 0.02, // Berm / Temporary Dune friction factor
     designcomponent_Fric_Seawall: 0.02, // Seawall  friction factor
+    // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 1). Inert until enabled.
+    designcomponent_Elev_Mangrove: -0.2, // Mangrove platform target bed elevation (m)
+    designcomponent_SetBathy_Mangrove: 0, // when 1, painting mangroves also sets bathy/topo to designcomponent_Elev_Mangrove
 
     // save data parameters
     create_animation: 0, // create animated gif when = 1

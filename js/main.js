@@ -1377,6 +1377,13 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
         MouseClickChange_view.setInt32(92, calc_constants.designcomponent_AddLinearStructure, true);             // i32
     }
     updateMouseClickLinearStructureUniforms();
+    // CODEX: Mangrove bathy/topo set-elevation uniforms (mangroves branch, Phase 2). Used starting Phase 3.
+    function updateMouseClickDesignBathyUniforms() {
+        MouseClickChange_view.setInt32(96, calc_constants.designcomponent_SetBathy, true);             // i32
+        MouseClickChange_view.setFloat32(100, calc_constants.designcomponent_TargetElev, true);             // f32
+        MouseClickChange_view.setFloat32(104, calc_constants.designcomponent_EdgeTaper, true);             // f32
+    }
+    updateMouseClickDesignBathyUniforms();
 
     // ExtractTimeSeries -  Bindings & Uniforms Config
     const ExtractTimeSeries_BindGroupLayout = create_ExtractTimeSeries_BindGroupLayout(device);
@@ -2521,11 +2528,18 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
                 else if(calc_constants.designcomponentToAdd == 8) {calc_constants.designcomponent_Friction = calc_constants.designcomponent_Fric_Dune;} 
                 else if(calc_constants.designcomponentToAdd == 9) {calc_constants.designcomponent_Friction = calc_constants.designcomponent_Fric_Berm;} 
                 else if(calc_constants.designcomponentToAdd == 10) {calc_constants.designcomponent_Friction = calc_constants.designcomponent_Fric_Seawall;} 
+                // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 2) - active values reset to inert (0) for every component except mangroves.
+                calc_constants.designcomponent_TargetElev = (calc_constants.designcomponentToAdd == 3) ? calc_constants.designcomponent_Elev_Mangrove : 0.0;
+                calc_constants.designcomponent_SetBathy = (calc_constants.designcomponentToAdd == 3) ? calc_constants.designcomponent_SetBathy_Mangrove : 0;
+                // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 4) - dispatch 1 (ID/friction) must never see SetBathy=1; the follow-up bathy dispatch below flips it on, then resets it.
+                const designcomponent_SetBathy_pending = calc_constants.designcomponent_SetBathy;
+                calc_constants.designcomponent_SetBathy = 0;
                 MouseClickChange_view.setFloat32(56, calc_constants.designcomponent_Friction, true);             // f32
                 MouseClickChange_view.setFloat32(60, calc_constants.changeSeaLevel_delta, true);             // f32
                 calc_constants.changeSeaLevel_delta = 0.0; // once the change is added once, set to zero
                 // CODEX: Upload pending linear-structure parameters before running MouseClickChange.wgsl.
                 updateMouseClickLinearStructureUniforms();
+                updateMouseClickDesignBathyUniforms();
 
                 runComputeShader(device, MouseClickChange_uniformBuffer, MouseClickChange_uniforms, MouseClickChange_Pipeline, MouseClickChange_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  // update depth/friction based on mouse click
                 if(calc_constants.whichPanelisOpen == 3){
@@ -2567,6 +2581,28 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
                     } else {
                         runCopyTextures(device, calc_constants, txtemp_MouseClick, txDesignComponents)
                         runCopyTextures(device, calc_constants, txtemp_MouseClick2, txBottomFriction)
+                        // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 4) - second dispatch of the same shader, now with SetBathy=1.
+                        if (designcomponent_SetBathy_pending == 1) {
+                            console.log('Setting Mangrove Bathy/Topo to Target Elevation')
+                            calc_constants.designcomponent_SetBathy = 1;
+                            updateMouseClickDesignBathyUniforms();
+                            runComputeShader(device, MouseClickChange_uniformBuffer, MouseClickChange_uniforms, MouseClickChange_Pipeline, MouseClickChange_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  // update bathy/topo to mangrove target elevation
+                            runCopyTextures(device, calc_constants, txtemp_MouseClick, txBottom)
+                            // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 7) - deliberately NOT updating txBottomInitial here,
+                            // matching the existing surfaceToChange==1 precedent above. Consequence: "Depth Change due to Sed Transport" (surfaceToPlot==21)
+                            // and its export will show a permanent step-change at this platform, indistinguishable from real sediment-transport accretion/erosion,
+                            // when useSedTransModel==1. This is a diagnostic/bookkeeping artifact only - it does not affect the erosion/deposition physics itself,
+                            // which reads live txBottom, not txBottomInitial. See HANDOFF_mangroves.md Phase 7 for the full analysis.
+                            // runCopyTextures(device, calc_constants, txtemp_MouseClick, txBottomInitial)
+                            runCopyTextures(device, calc_constants, txtemp_MouseClick2, txstateUVstar)
+                            runComputeShader(device, Updateneardry_uniformBuffer, Updateneardry_uniforms, Updateneardry_Pipeline, Updateneardry_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  //need to update tridiagonal coefficients due to change inn depth
+                            runCopyTextures(device, calc_constants, txtemp_bottom, txBottom)
+                            if (calc_constants.NLSW_or_Bous >= 1) { // only update for Celeris Boussinesq equations
+                                console.log('Updating neardry & tridiag coef due to mangrove bathy set')
+                                runComputeShader(device, UpdateTrid_uniformBuffer, UpdateTrid_uniforms, UpdateTrid_Pipeline, UpdateTrid_BindGroup, calc_constants.DispatchX, calc_constants.DispatchY);  //need to update tridiagonal coefficients due to change inn depth
+                            }
+                            calc_constants.designcomponent_SetBathy = 0;
+                        }
                     }
                 }
             }
@@ -4724,6 +4760,8 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'designcomponent_Fric_Dune-button', input: 'designcomponent_Fric_Dune-input', property: 'designcomponent_Fric_Dune' },
         { id: 'designcomponent_Fric_Berm-button', input: 'designcomponent_Fric_Berm-input', property: 'designcomponent_Fric_Berm' },
         { id: 'designcomponent_Fric_Seawall-button', input: 'designcomponent_Fric_Seawall-input', property: 'designcomponent_Fric_Seawall' },
+        // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 1).
+        { id: 'designcomponent_Elev_Mangrove-button', input: 'designcomponent_Elev_Mangrove-input', property: 'designcomponent_Elev_Mangrove' },
         { id: 'changeSeaLevel-button', input: 'changeSeaLevel-input', property: 'changeSeaLevel' },
         { id: 'dt_writesurface-button', input: 'dt_writesurface-input', property: 'dt_writesurface' },
         // Added by Codex: Start nested-grid boundary time-series output controls.
@@ -4766,6 +4804,8 @@ document.addEventListener('DOMContentLoaded', function () {
         { input: 'changethisTimeSeries-select', property: 'changethisTimeSeries' },
         { input: 'useBreakingModel-select', property: 'useBreakingModel' },
         { input: 'designcomponentToAdd-select', property: 'designcomponentToAdd' },
+        // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 1).
+        { input: 'designcomponent_SetBathy_Mangrove-select', property: 'designcomponent_SetBathy_Mangrove' },
         // CODEX: Track which linear-structure endpoint the shared x/y inputs edit.
         { input: 'designcomponent_CurrentEndPoint-select', property: 'designcomponent_CurrentEndPoint' },
         { input: 'ShowArrows-select', property: 'ShowArrows' },
