@@ -626,6 +626,72 @@ David" below, which are product decisions, not implementation gaps.
 
 ---
 
+## Post-review fixes
+
+### BUG-1 — Edge taper carved slopes inside overlapping footprints (fixed 2026-08-25)
+
+**Reported by David** with a screenshot: a single painted mangrove disc renders as a clean flat
+platform, but a cluster of overlapping discs is cut through by dark crescent arcs running back down
+to the original deep bed — "the slope is created even when it is not needed."
+
+**Cause.** `calc_component_bathy_elevation` defined the taper against the **individual disc of the
+current stroke**, ramping from the target to the Phase 5 stashed pre-edit bed between `inner_radius`
+and `outer_radius`. Painting is continuous and discs overlap heavily, so a later stroke's ring
+routinely lands on cells an earlier stroke had already flattened, and drags them back toward their
+untouched (deep) elevation. Every stroke's perimeter therefore engraves a groove across the platform
+the previous strokes built.
+
+The component ID is no discriminator: dispatch 1 stamps the ID over the whole disc *before*
+dispatch 2 reads it, so the current stroke's ring cells are indistinguishable from earlier ones.
+
+**First attempt (insufficient — recorded so it is not retried).** Keeping whichever of the tapered
+value and the live bed was already nearer the target. It removes the obvious grooves but not all of
+them: a cell can land in the taper ring of *every* stroke that ever touches it and so never reach
+the target at all. A 6-disc cluster simulated at `R=30, taper=6` still left 27 interior cells below
+0 m, min −2.4 m. Any per-disc rule has this failure mode.
+
+**Fix.** Define the taper from the **union footprint** instead of from each disc. `txDesignComponents.x`
+is written by dispatch 1 and copied back before dispatch 2 runs, so it already includes the current
+stroke. A new `footprint_edge_distance(idx, ox, oy)` measures the distance from the evaluation point
+to the nearest cell *outside* the component footprint, over a window sized to `EdgeTaper` (capped at
+12 cells per side); the elevation is then
+
+```wgsl
+let w = clamp(1.0 - d / taper, 0.0, 1.0);
+return mix(target_elev, stashed_bed, w);
+```
+
+so the slope follows the outline of the union and the interior is always exactly the target. `(ox, oy)`
+offsets the evaluation point by half a cell for the north/east face channels.
+
+Because the result depends only on (ID map, stash, target) — never on the live bed or on stroke order —
+it is idempotent, order-independent, and **self-healing**: every paint event recomputes the whole
+footprint from the stashed bed, so a cell that was on the edge earlier is flattened once later strokes
+make it interior. Simulated on the same 6-disc cluster: interior min = target exactly, 0 cells below 0 m,
+identical under repeated and reversed stroke order.
+
+### BUG-2 — `target` is a WGSL reserved keyword (fixed 2026-08-25)
+
+The first attempt at BUG-1 introduced `let target = globals.designcomponent_TargetElev;`. `target` is
+**reserved** in WGSL, so `createShaderModule` fails and the entire `MouseClickChange` pipeline never
+builds — which is why that attempt appeared to change nothing at all rather than partially working.
+Renamed to `target_elev`.
+
+**Verification.** The edited shader was compiled with naga/wgpu-native and used to build a real
+compute pipeline against the same 8-entry bind-group layout as `Handler_MouseClickChange.js`
+(uniform + 5 sampled textures + 2 `rgba32float` write-only storage textures): clean, no messages.
+Worth repeating whenever this file changes — there is no build step here, so a WGSL error only shows
+up as a console exception at runtime.
+
+**Files:** `shaders/MouseClickChange.wgsl` only.
+
+**Still to verify in-browser:** paint an overlapping cluster and confirm the interior is uniform with
+a taper only around the outside of the merged patch; confirm an isolated disc is unchanged. Note that
+cells whose stash was captured *after* the buggy version had already dug a groove keep that grooved
+value as their reference — start from a freshly loaded example for a clean comparison.
+
+---
+
 ## Open questions for Patrick / David
 
 - Should the mangrove platform be **flat** at the target elevation, or should it follow the
