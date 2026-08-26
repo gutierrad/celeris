@@ -196,7 +196,7 @@ errors, `surfaceToPlot == 22` correctly renders the painted patch. Baseline matc
 Add the parameters, wire the UI, change no behavior yet.
 
 - [x] `js/constants_load_calc.js` (after line 355, the `designcomponent_Fric_*` block): added
-      `designcomponent_Elev_Mangrove` (default `0.5` m) and `designcomponent_SetBathy_Mangrove`
+      `designcomponent_Elev_Mangrove` (default `-0.2` m) and `designcomponent_SetBathy_Mangrove`
       (`0`/`1`, default `0`, inert)
 - [x] `index.html` design panel: new "Mangroves: Set Bathymetry/Topography Elevation" block
       inserted right after the friction inputs, before the `designcomponent_Radius` block —

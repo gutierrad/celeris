@@ -358,7 +358,7 @@ var calc_constants = {
     designcomponent_Fric_Berm: 0.02, // Berm / Temporary Dune friction factor
     designcomponent_Fric_Seawall: 0.02, // Seawall  friction factor
     // CODEX: Mangrove bathy/topo set-elevation (mangroves branch, Phase 1). Inert until enabled.
-    designcomponent_Elev_Mangrove: 0.5, // Mangrove platform target bed elevation (m)
+    designcomponent_Elev_Mangrove: -0.2, // Mangrove platform target bed elevation (m)
     designcomponent_SetBathy_Mangrove: 0, // when 1, painting mangroves also sets bathy/topo to designcomponent_Elev_Mangrove
 
     // save data parameters
