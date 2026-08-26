@@ -1,4 +1,5 @@
 // File_loader.js
+import { asset } from '../../js/paths.js';  // resolve asset URLs relative to the deployed site root
 
 // load depth file
 export async function loadDepthSurface(bathymetryContent, calc_constants) {
@@ -510,9 +511,9 @@ export async function loadUserImage(fileObject) {
 // function to load cubemap face images
 export async function loadCubeBitmaps() {
     const urls = {
-        px: '/skybox/px.jpg', nx: '/skybox/nx.jpg',
-        py: '/skybox/py.jpg', ny: '/skybox/ny.jpg',
-        pz: '/skybox/pz.jpg', nz: '/skybox/nz.jpg'
+        px: asset('skybox/px.jpg'), nx: asset('skybox/nx.jpg'),
+        py: asset('skybox/py.jpg'), ny: asset('skybox/ny.jpg'),
+        pz: asset('skybox/pz.jpg'), nz: asset('skybox/nz.jpg')
       };
       
     const entries = Object.entries(urls);

@@ -1,4 +1,5 @@
 ﻿// import source files
+import { asset } from '../../js/paths.js';  // resolve asset URLs relative to the deployed site root
 import { calc_constants, timeSeriesData, loadConfig, init_sim_parameters } from './constants_load_calc.js';  // variables and functions needed for init_sim_parameters
 import { loadDepthSurface, loadFrictionSurface, loadTransectWaveData, loadWaveData, loadOverlay, CreateGoogleMapImage, calculateGoogleMapScaleAndOffset, loadImageBitmap, loadUserImage, loadCubeBitmaps} from './File_Loader.js';  // load depth surface and wave data file
 import { readTextureData, downloadTextureData, downloadObjectAsFile, handleFileSelect, loadJsonIntoCalcConstants, saveRenderedImageAsJPEG, saveSingleValueToFile, saveTextureSlicesAsImages, createAnimatedGifFromTexture, writeSurfaceData, sleep} from './File_Writer.js';  // load depth surface and wave data file
@@ -384,53 +385,53 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
     console.log('Downloading surface texture images...')
     // Design components textures
     // white water / turbulence texture
-    let imageUrl = '/textures/turbulence.jpg'; 
+    let imageUrl = asset('textures/turbulence.jpg'); 
     let imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 0)
     // coral reef texture
-    imageUrl = '/textures/coralreef.jpg'; 
+    imageUrl = asset('textures/coralreef.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 1)
     // oyster / mussel bed texture
-    imageUrl = '/textures/oysterbed.jpg'; 
+    imageUrl = asset('textures/oysterbed.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 2)
     // mangrove texture
-    imageUrl = '/textures/mangrove.jpg'; 
+    imageUrl = asset('textures/mangrove.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 3)
     // kelp texture
-    imageUrl = '/textures/kelpbed.jpg'; 
+    imageUrl = asset('textures/kelpbed.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 4)
     // grass texture
-    imageUrl = '/textures/grass.jpg'; 
+    imageUrl = asset('textures/grass.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 5)
     // scrub texture
-    imageUrl = '/textures/scrub.jpg'; 
+    imageUrl = asset('textures/scrub.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 6)
     // rubblemound texture
-    imageUrl = '/textures/rubble.jpg'; 
+    imageUrl = asset('textures/rubble.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 7)
     // dune texture
-    imageUrl = '/textures/dune_veg.jpg'; 
+    imageUrl = asset('textures/dune_veg.jpg'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 8)
     // arrow texture
-    imageUrl = '/textures/arrow.png'; 
+    imageUrl = asset('textures/arrow.png'); 
     imData = await loadImageBitmap(imageUrl);    
     copyImageBitmapToTexture(device, imData, txSamplePNGs, 9)
 
     // Model textures
     // red_brick texture
-    //imageUrl = '/textures/red_brick.jpg'; 
+    //imageUrl = asset('textures/red_brick.jpg'); 
     //imData = await loadImageBitmap(imageUrl);    
     //copyImageBitmapToTexture(device, imData, txModelPNGs, 0)
     // white_brick texture
-    //imageUrl = '/textures/white_brick.jpg'; 
+    //imageUrl = asset('textures/white_brick.jpg'); 
     //imData = await loadImageBitmap(imageUrl);    
     //copyImageBitmapToTexture(device, imData, txModelPNGs, 1)
 
@@ -1028,76 +1029,76 @@ async function initializeWebGPUApp(configContent, bathymetryContent, waveContent
     Copytxf32_txf16_view.setInt32(4, calc_constants.HEIGHT, true);          // i32
 
     // Fetch the source code of various shaders used in the application.
-    const Pass0_ShaderCode = await fetchShader('/transect_version/shaders/Pass0.wgsl');
+    const Pass0_ShaderCode = await fetchShader(asset('transect_version/shaders/Pass0.wgsl'));
     var Pass1_ShaderCode = null;
     if (calc_constants.Accuracy_mode == 1) {
         console.log("Using 4th-order MUSCL-TVD reconstruction scheme in Pass1");
-        Pass1_ShaderCode = await fetchShader('/transect_version/shaders/Pass1_HighOrder.wgsl');
+        Pass1_ShaderCode = await fetchShader(asset('transect_version/shaders/Pass1_HighOrder.wgsl'));
     } else {
-        Pass1_ShaderCode = await fetchShader('/transect_version/shaders/Pass1.wgsl');
+        Pass1_ShaderCode = await fetchShader(asset('transect_version/shaders/Pass1.wgsl'));
     }
     var Pass2_ShaderCode = null;
     if (calc_constants.Accuracy_mode == 1) {
         console.log("Using HLLEM Flux Solver in Pass2");
-        Pass2_ShaderCode = await fetchShader('/transect_version/shaders/Pass2_HighOrder.wgsl');  
+        Pass2_ShaderCode = await fetchShader(asset('transect_version/shaders/Pass2_HighOrder.wgsl'));  
     } else {
-        Pass2_ShaderCode = await fetchShader('/transect_version/shaders/Pass2.wgsl');  
+        Pass2_ShaderCode = await fetchShader(asset('transect_version/shaders/Pass2.wgsl'));  
     }
-    const PassBreaking_ShaderCode = await fetchShader('/transect_version/shaders/Pass_Breaking.wgsl'); 
-    const Pass3A_Coulwave_ShaderCode= await fetchShader('/transect_version/shaders/Pass3A_COULWAVE.wgsl')
-    const Pass3B_Coulwave_ShaderCode= await fetchShader('/transect_version/shaders/Pass3B_COULWAVE.wgsl')
-    const Pass3_ShaderCode_NLSW = await fetchShader('/transect_version/shaders/Pass3_NLSW.wgsl')
+    const PassBreaking_ShaderCode = await fetchShader(asset('transect_version/shaders/Pass_Breaking.wgsl')); 
+    const Pass3A_Coulwave_ShaderCode= await fetchShader(asset('transect_version/shaders/Pass3A_COULWAVE.wgsl'))
+    const Pass3B_Coulwave_ShaderCode= await fetchShader(asset('transect_version/shaders/Pass3B_COULWAVE.wgsl'))
+    const Pass3_ShaderCode_NLSW = await fetchShader(asset('transect_version/shaders/Pass3_NLSW.wgsl'))
     var Pass3_ShaderCode_Bous = null;
     if (calc_constants.NLSW_or_Bous == 1) {
         console.log("Using Celeris equations in Boussinesq mode");
-        Pass3_ShaderCode_Bous = await fetchShader('/transect_version/shaders/Pass3_Bous.wgsl');
+        Pass3_ShaderCode_Bous = await fetchShader(asset('transect_version/shaders/Pass3_Bous.wgsl'));
     }
     else if (calc_constants.NLSW_or_Bous == 2) {
         console.log("Using COULWAVE equations in Boussinesq mode");
-        Pass3_ShaderCode_Bous = await fetchShader('/transect_version/shaders/Pass3_COULWAVE.wgsl');
+        Pass3_ShaderCode_Bous = await fetchShader(asset('transect_version/shaders/Pass3_COULWAVE.wgsl'));
     }
     
-    const SedTrans_Pass1_ShaderCode = await fetchShader('/transect_version/shaders/SedTrans_Pass1.wgsl');
-    const SedTrans_Pass3_ShaderCode = await fetchShader('/transect_version/shaders/SedTrans_Pass3.wgsl')
-    const BoundaryPass_ShaderCode = await fetchShader('/transect_version/shaders/BoundaryPass.wgsl');
+    const SedTrans_Pass1_ShaderCode = await fetchShader(asset('transect_version/shaders/SedTrans_Pass1.wgsl'));
+    const SedTrans_Pass3_ShaderCode = await fetchShader(asset('transect_version/shaders/SedTrans_Pass3.wgsl'))
+    const BoundaryPass_ShaderCode = await fetchShader(asset('transect_version/shaders/BoundaryPass.wgsl'));
     
     var TridiagX_ShaderCode = null; var TridiagY_ShaderCode = null;  //we can likely fold thee back into a single shader
     if (calc_constants.NLSW_or_Bous == 2) {
-        TridiagX_ShaderCode = await fetchShader('/transect_version/shaders/TriDiag_PCRx_COULWAVE.wgsl');
-        TridiagY_ShaderCode = await fetchShader('/transect_version/shaders/TriDiag_PCRy_COULWAVE.wgsl');
+        TridiagX_ShaderCode = await fetchShader(asset('transect_version/shaders/TriDiag_PCRx_COULWAVE.wgsl'));
+        TridiagY_ShaderCode = await fetchShader(asset('transect_version/shaders/TriDiag_PCRy_COULWAVE.wgsl'));
     } else {
-        TridiagX_ShaderCode = await fetchShader('/transect_version/shaders/TriDiag_PCRx.wgsl');
-        TridiagY_ShaderCode = await fetchShader('/transect_version/shaders/TriDiag_PCRy.wgsl');
+        TridiagX_ShaderCode = await fetchShader(asset('transect_version/shaders/TriDiag_PCRx.wgsl'));
+        TridiagY_ShaderCode = await fetchShader(asset('transect_version/shaders/TriDiag_PCRy.wgsl'));
     }
 
-    const SedTrans_UpdateBottom_ShaderCode = await fetchShader('/transect_version/shaders/SedTrans_UpdateBottom.wgsl');
-    const Updateneardry_ShaderCode = await fetchShader('/transect_version/shaders/Update_neardry.wgsl');
+    const SedTrans_UpdateBottom_ShaderCode = await fetchShader(asset('transect_version/shaders/SedTrans_UpdateBottom.wgsl'));
+    const Updateneardry_ShaderCode = await fetchShader(asset('transect_version/shaders/Update_neardry.wgsl'));
     
     var UpdateTrid_ShaderCode = null;  // we can likely fold these back into a single shader
     if (calc_constants.NLSW_or_Bous == 2) {
-        UpdateTrid_ShaderCode = await fetchShader('/transect_version/shaders/Update_TriDiag_coef_COULWAVE.wgsl');
+        UpdateTrid_ShaderCode = await fetchShader(asset('transect_version/shaders/Update_TriDiag_coef_COULWAVE.wgsl'));
     } else {
-        UpdateTrid_ShaderCode = await fetchShader('/transect_version/shaders/Update_TriDiag_coef.wgsl');
+        UpdateTrid_ShaderCode = await fetchShader(asset('transect_version/shaders/Update_TriDiag_coef.wgsl'));
     }
 
-    const CalcMeans_ShaderCode = await fetchShader('/transect_version/shaders/CalcMeans.wgsl');
-    const CalcWaveHeight_ShaderCode = await fetchShader('/transect_version/shaders/CalcWaveHeight.wgsl');
-    const AddDisturbance_ShaderCode = await fetchShader('/transect_version/shaders/AddDisturbance.wgsl');
-    const MouseClickChange_ShaderCode = await fetchShader('/transect_version/shaders/MouseClickChange.wgsl');
-    const ExtractTimeSeries_ShaderCode = await fetchShader('/transect_version/shaders/ExtractTimeSeries.wgsl');
+    const CalcMeans_ShaderCode = await fetchShader(asset('transect_version/shaders/CalcMeans.wgsl'));
+    const CalcWaveHeight_ShaderCode = await fetchShader(asset('transect_version/shaders/CalcWaveHeight.wgsl'));
+    const AddDisturbance_ShaderCode = await fetchShader(asset('transect_version/shaders/AddDisturbance.wgsl'));
+    const MouseClickChange_ShaderCode = await fetchShader(asset('transect_version/shaders/MouseClickChange.wgsl'));
+    const ExtractTimeSeries_ShaderCode = await fetchShader(asset('transect_version/shaders/ExtractTimeSeries.wgsl'));
 
-    const Skybox_vertexShaderCode = await fetchShader('/transect_version/shaders/skybox.vertex.wgsl');
-    const Skybox_fragmentShaderCode = await fetchShader('/transect_version/shaders/skybox.fragment.wgsl');
-    //const Duck_vertexShaderCode = await fetchShader('/transect_version/shaders/duck.vertex.wgsl');
-    //const Duck_fragmentShaderCode = await fetchShader('/transect_version/shaders/duck.fragment.wgsl');
-    const Model_vertexShaderCode = await fetchShader('/transect_version/shaders/model.vertex.wgsl');
-    const Model_fragmentShaderCode = await fetchShader('/transect_version/shaders/model.fragment.wgsl');
+    const Skybox_vertexShaderCode = await fetchShader(asset('transect_version/shaders/skybox.vertex.wgsl'));
+    const Skybox_fragmentShaderCode = await fetchShader(asset('transect_version/shaders/skybox.fragment.wgsl'));
+    //const Duck_vertexShaderCode = await fetchShader(asset('transect_version/shaders/duck.vertex.wgsl'));
+    //const Duck_fragmentShaderCode = await fetchShader(asset('transect_version/shaders/duck.fragment.wgsl'));
+    const Model_vertexShaderCode = await fetchShader(asset('transect_version/shaders/model.vertex.wgsl'));
+    const Model_fragmentShaderCode = await fetchShader(asset('transect_version/shaders/model.fragment.wgsl'));
 
-    const vertexShaderCode = await fetchShader('/transect_version/shaders/vertex.wgsl');
-    const vertex3DShaderCode = await fetchShader('/transect_version/shaders/vertex3D.wgsl');
-    const fragmentShaderCode = await fetchShader('/transect_version/shaders/fragment.wgsl');
+    const vertexShaderCode = await fetchShader(asset('transect_version/shaders/vertex.wgsl'));
+    const vertex3DShaderCode = await fetchShader(asset('transect_version/shaders/vertex3D.wgsl'));
+    const fragmentShaderCode = await fetchShader(asset('transect_version/shaders/fragment.wgsl'));
 
-    const Copytxf32_txf16_ShaderCode = await fetchShader('/transect_version/shaders/Copytxf32_txf16.wgsl');
+    const Copytxf32_txf16_ShaderCode = await fetchShader(asset('transect_version/shaders/Copytxf32_txf16.wgsl'));
     console.log("Shaders loaded.");
 
     // Configure the pipelines, one for each shader.
@@ -3268,7 +3269,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Check if a wave file was uploaded, otherwise load a default
                 if (!waveFile) {
                     // Load default wave file if none provided
-                    fetch('/no_waves.txt')
+                    fetch(asset('no_waves.txt'))
                         .then(response => response.text())
                         .then(defaultWaveContent => {
                             startSimulationWithWave(configContent, bathymetryContent, defaultWaveContent, OverlayFile, modelFile);
